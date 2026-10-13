@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3b6ef5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CET-6 听力">
+<title>CET-6 听力分节播放器</title>
+<style>
+  :root{
+    --bg:#f4f6fa; --card:#fff; --ink:#1b2233; --ink2:#6b7692; --line:#e3e8f2;
+    --a:#3b6ef5; --b:#12a37a; --c:#8b5cf6; --now:#f59e0b;
+    --shadow:0 1px 2px rgba(20,30,60,.06),0 8px 24px rgba(20,30,60,.07);
+    --tap:44px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased; touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button,select,.paper,.item,.tblock{-webkit-user-select:none; user-select:none}
+  #app{display:flex; height:100%; padding-bottom:88px}
+
+  /* ---------- 桌面：左侧试卷列表 ---------- */
+  .sidebar{
+    width:246px; flex:none; background:var(--card); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .brand{padding:18px 18px 12px}
+  .brand h1{margin:0; font-size:17px; letter-spacing:.3px}
+  .brand .sub{margin:4px 0 0; font-size:12px; color:var(--ink2)}
+  #papers{overflow-y:auto; padding:4px 10px 20px}
+  .ptitle{font-size:12px; color:var(--ink2); font-weight:600; letter-spacing:.6px; padding:14px 8px 6px}
+  .paper{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:9px 10px; border-radius:9px; cursor:pointer; border:1px solid transparent;
+  }
+  .paper:hover{background:#f2f5fc}
+  .paper.on{background:#eaf0ff; border-color:#c9d8ff}
+  .paper.on .pn{color:var(--a); font-weight:600}
+  .pn{font-size:13.5px}
+  .badge{font-size:10.5px; color:var(--ink2); background:#f0f3f9; border-radius:20px; padding:2px 7px; white-space:nowrap}
+
+  /* ---------- 手机顶栏（桌面隐藏） ---------- */
+  .mobar{display:none}
+
+  main{flex:1; min-width:0; overflow-y:auto; padding:20px 22px 28px}
+  .topbar{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; justify-content:space-between; margin-bottom:16px}
+  .topbar h2{margin:0; font-size:20px}
+  .topbar .sub{margin:4px 0 0; font-size:12.5px; color:var(--ink2)}
+  .actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .fmt{display:flex; align-items:center; gap:5px; font-size:12.5px; color:var(--ink2)}
+  button{font:inherit; font-size:13px; cursor:pointer; border-radius:9px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); padding:8px 13px; transition:.15s}
+  button:hover:not(:disabled){border-color:#c3cee8; background:#f7f9ff}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  button.primary{background:var(--a); border-color:var(--a); color:#fff}
+  button.primary:hover:not(:disabled){background:#2f5fe0; border-color:#2f5fe0}
+
+  .warn{display:none; gap:9px; align-items:center; background:#fff8e6; border:1px solid #ffe2a3;
+    color:#7a5b00; font-size:13px; padding:9px 13px; border-radius:10px; margin-bottom:14px; line-height:1.5}
+  .warn.show{display:flex}
+
+  /* ---------- 时间轴 ---------- */
+  .timeline{position:relative; height:46px; border-radius:11px; overflow:hidden; background:#e9edf6;
+    margin-bottom:6px; box-shadow:var(--shadow)}
+  .tblock{position:absolute; top:0; bottom:0; cursor:pointer; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; gap:4px;
+    color:#fff; font-size:11.5px; font-weight:600; letter-spacing:.3px;
+    border-right:2px solid var(--card); transition:filter .15s}
+  .tblock:last-child{border-right:0}
+  .tblock:hover{filter:brightness(1.08)}
+  .tblock.sA{background:var(--a)} .tblock.sB{background:var(--b)} .tblock.sC{background:var(--c)}
+  .tblock.on{box-shadow:inset 0 0 0 3px #fff; filter:brightness(1.18)}
+  .playhead{position:absolute; top:0; bottom:0; width:2px; background:var(--now); pointer-events:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.6)}
+  .tl-legend{display:flex; gap:16px; font-size:12px; color:var(--ink2); margin:0 0 18px; padding-left:2px}
+  .dot{display:inline-block; width:8px; height:8px; border-radius:3px; margin-right:5px; vertical-align:1px}
+
+  /* ---------- 章节 ---------- */
+  .section{margin-bottom:18px}
+  .sec-head{display:flex; align-items:baseline; gap:9px; margin:0 2px 9px}
+  .sec-head .tag{font-size:11.5px; font-weight:700; color:#fff; border-radius:6px; padding:2px 8px; letter-spacing:.4px}
+  .sec-head .zh{font-size:15px; font-weight:600}
+  .sec-head .en{font-size:12px; color:var(--ink2)}
+  .sec-head .q{margin-left:auto; font-size:12px; color:var(--ink2)}
+  .items{display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:9px}
+  .item{background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 13px;
+    cursor:pointer; display:flex; flex-direction:column; gap:3px; transition:.15s; box-shadow:var(--shadow)}
+  .item:hover{border-color:#c3cee8; transform:translateY(-1px)}
+  .item.on{border-color:var(--now); box-shadow:0 0 0 2px rgba(245,158,11,.22), var(--shadow)}
+  .item .r1{display:flex; align-items:center; gap:8px}
+  .item .idx{width:21px; height:21px; flex:none; border-radius:7px; background:#f0f3f9; color:var(--ink2);
+    font-size:11.5px; font-weight:700; display:flex; align-items:center; justify-content:center}
+  .item.on .idx{background:var(--now); color:#fff}
+  .item .nm{font-size:14px; font-weight:600}
+  .item .r2{font-size:11.5px; color:var(--ink2); display:flex; gap:10px; padding-left:29px}
+  .item .playing{color:var(--now); font-weight:600}
+
+  /* ---------- 底部播放条 ---------- */
+  .player{position:fixed; left:0; right:0; bottom:0; height:88px;
+    background:rgba(255,255,255,.93); backdrop-filter:blur(12px);
+    border-top:1px solid var(--line); box-shadow:0 -4px 20px rgba(20,30,60,.07);
+    display:flex; align-items:center; gap:16px; padding:0 22px}
+  .pbtns{display:flex; align-items:center; gap:8px; flex:none; order:1}
+  .round{width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    padding:0; font-size:15px; flex:none}
+  .round.main{width:50px; height:50px; background:var(--a); border-color:var(--a); color:#fff; font-size:19px}
+  .round.main:hover:not(:disabled){background:#2f5fe0; border-color:#2f5fe0}
+  .round.on{background:var(--now); border-color:var(--now); color:#fff;
+    box-shadow:0 4px 12px rgba(245,158,11,.4)}
+  .pnow{order:2; flex:1; min-width:0}
+  .pnow .t1{font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .pnow .t2{font-size:11.5px; color:var(--ink2); margin-top:1px}
+  .segbar{height:6px; border-radius:4px; background:#e6eaf3; margin-top:7px; overflow:hidden; cursor:pointer}
+  .segbar i{display:block; height:100%; width:0; background:var(--a); border-radius:4px}
+  .opts{display:flex; align-items:center; gap:14px; flex:none; font-size:12.5px; color:var(--ink2); order:3}
+  .opts label{display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none}
+  select{font:inherit; font-size:12.5px; border:1px solid var(--line); border-radius:8px; padding:5px 7px;
+    background:#fff; color:var(--ink)}
+  input[type=checkbox]{accent-color:var(--a); width:15px; height:15px; cursor:pointer}
+
+  /* ============================================================
+     手机布局（≤760px）—— 按「逐段精听、反复听」优化
+     ============================================================ */
+  @media (max-width:760px){
+    #app{flex-direction:column; height:auto; padding-bottom:0}
+    .sidebar{display:none}
+
+    .mobar{
+      display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:20;
+      padding:calc(env(safe-area-inset-top) + 9px) 14px 9px;
+      background:rgba(255,255,255,.95); backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--line);
+    }
+    .mobar .mlogo{font-size:14px; font-weight:700; flex:none; color:var(--a)}
+    .mobar select{flex:1; min-width:0; font-size:15px; font-weight:600;
+      padding:9px 10px; border-radius:10px; border-color:#d5dcec}
+
+    /* 底部留出播放条的高度，否则最后一张卡片被盖住 */
+    main{padding:12px 12px calc(200px + env(safe-area-inset-bottom))}
+    .topbar{margin-bottom:10px; gap:8px}
+    .topbar h2{font-size:17px}
+    .topbar .sub{font-size:11.5px}
+    .actions{display:none}      /* 手机上不摆导出按钮，避免一片灰色 */
+    .warn{font-size:12px; padding:9px 11px; margin-bottom:10px}
+
+    .timeline{height:42px; border-radius:10px; margin-bottom:5px}
+    .tblock{font-size:13px; border-right-width:1px}
+    .tblock span{display:none}                  /* 只留段号，省地方 */
+    .tl-legend{font-size:10.5px; gap:9px; margin-bottom:13px; flex-wrap:wrap}
+    .dot{width:7px; height:7px}
+
+    .section{margin-bottom:14px}
+    .sec-head{gap:7px; margin-bottom:7px}
+    .sec-head .zh{font-size:14px}
+    .sec-head .en{display:none}
+    .sec-head .tag{font-size:11px; padding:2px 7px}
+    .items{grid-template-columns:1fr; gap:8px}
+    .item{padding:14px; min-height:64px; gap:4px}
+    .item .nm{font-size:15.5px}
+    .item .idx{width:24px; height:24px; font-size:12px}
+    .item .r2{font-size:12px; padding-left:32px; gap:12px}
+
+    /* 播放条：三行，按钮做大，拇指够得着 */
+    .player{
+      height:auto; flex-wrap:wrap; gap:9px; align-items:center;
+      padding:11px 14px calc(env(safe-area-inset-bottom) + 11px);
+    }
+    .pnow{order:1; flex:1 1 100%; width:100%}
+    .pnow .t1{font-size:15px}
+    .pnow .t2{font-size:12px}
+    .segbar{height:8px; border-radius:5px; margin-top:9px}
+    .pbtns{order:2; flex:1 1 100%; justify-content:center; gap:16px}
+    .round{width:54px; height:54px; font-size:19px; border-width:1.5px}
+    .round.main{width:68px; height:68px; font-size:26px; box-shadow:0 6px 18px rgba(59,110,245,.35)}
+    .opts{
+      order:3; flex:1 1 100%; justify-content:space-between; gap:8px;
+      font-size:12.5px; padding-top:2px;
+    }
+    .opts label{padding:6px 2px}
+    input[type=checkbox]{width:19px; height:19px}
+    .opts select{font-size:14px; padding:7px 8px; border-radius:9px}
+  }
+
+  /* 超窄屏再收一收 */
+  @media (max-width:360px){
+    .mobar .mlogo{display:none}
+    .round{width:48px; height:48px}
+    .round.main{width:60px; height:60px; font-size:23px}
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>CET-6 听力</h1>
+      <p class="sub">6 场真题 · 12 套卷 · 84 段</p>
+    </div>
+    <nav id="papers"></nav>
+  </aside>
+
+  <main>
+    <div class="mobar">
+      <span class="mlogo">CET-6</span>
+      <select id="paperSel" aria-label="选择试卷"></select>
+    </div>
+
+    <div class="warn" id="warn"></div>
+
+    <div class="topbar">
+      <div>
+        <h2 id="paperTitle">—</h2>
+        <p class="sub" id="paperMeta"></p>
+      </div>
+      <div class="actions" id="actions">
+        <label class="fmt">格式
+          <select id="optFmt">
+            <option value="m4a" selected>m4a 原音质</option>
+            <option value="mp3">mp3 通用</option>
+          </select>
+        </label>
+        <button id="btnCheck" title="重新用 ffmpeg 核对本卷的分段是否准确">重新核对分析</button>
+        <button id="btnExportSeg">导出本段</button>
+        <button id="btnExportPaper" class="primary">导出本卷（7 段打包）</button>
+      </div>
+    </div>
+
+    <div class="timeline" id="timeline"></div>
+    <div class="tl-legend">
+      <span><i class="dot" style="background:var(--a)"></i>Section A 长对话</span>
+      <span><i class="dot" style="background:var(--b)"></i>Section B 听力篇章</span>
+      <span><i class="dot" style="background:var(--c)"></i>Section C 讲座</span>
+      <span style="margin-left:auto"><i class="dot" style="background:var(--now)"></i>当前播放</span>
+    </div>
+
+    <div id="sections"></div>
+  </main>
+</div>
+
+<footer class="player">
+  <div class="pnow">
+    <div class="t1" id="nowTitle">请选择一段开始</div>
+    <div class="t2" id="nowMeta">—</div>
+    <div class="segbar" id="segbar"><i id="segfill"></i></div>
+  </div>
+  <div class="pbtns">
+    <button class="round" id="btnLoop" title="循环本段（反复听）">⟲</button>
+    <button class="round" id="btnPrev" title="上一段（[）">⏮</button>
+    <button class="round main" id="btnPlay" title="播放 / 暂停（空格）">▶</button>
+    <button class="round" id="btnNext" title="下一段（]）">⏭</button>
+  </div>
+  <div class="opts">
+    <label title="播完本段自动接着下一段"><input type="checkbox" id="optAuto" checked>连续播放</label>
+    <label>速度
+      <select id="optRate">
+        <option value="0.6">0.6×</option>
+        <option value="0.75">0.75×</option>
+        <option value="0.9">0.9×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.1">1.1×</option>
+        <option value="1.25">1.25×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+  </div>
+</footer>
+
+<audio id="audio" preload="metadata"></audio>
+
+<script>
+/* ============================================================
+   分析数据（由 analyze_audio.py 用 ffmpeg 静音检测得出）
+   每个文件：[总时长, 依次 7 段的开始时间]；段尾 = 下一段开头，最后一段到文件结束。
+   依据：每题后约 13.4 秒答题停顿，每卷正好 25 处，
+        按 4/4/3/4/3/3/4 分组成 7 段 = SectionA 8题 / B 7题 / C 10题。
+   ============================================================ */
+const SEGS = [
+  {s:'A', n:'Conversation One', zh:'长对话一', q:4},
+  {s:'A', n:'Conversation Two', zh:'长对话二', q:4},
+  {s:'B', n:'Passage One',      zh:'篇章一',   q:3},
+  {s:'B', n:'Passage Two',      zh:'篇章二',   q:4},
+  {s:'C', n:'Lecture One',      zh:'讲座一',   q:3},
+  {s:'C', n:'Lecture Two',      zh:'讲座二',   q:3},
+  {s:'C', n:'Lecture Three',    zh:'讲座三',   q:4}
+];
+const SECTION = {
+  A:{zh:'长对话',     en:'Long Conversations', q:8,  color:'var(--a)'},
+  B:{zh:'听力篇章',   en:'Passages',           q:7,  color:'var(--b)'},
+  C:{zh:'讲座 / 讲话', en:'Lectures & Talks',   q:10, color:'var(--c)'}
+};
+const PAPERS = {
+  '2023_06_1': {y:2023,m:6, set:1, dur:1652.93, st:[0,234.01,446.15,653.41,885.38,1149.16,1392.78]},
+  '2023_06_2': {y:2023,m:6, set:2, dur:1652.98, st:[0,231.78,428.18,632.56,846.00,1137.64,1384.28]},
+  '2023_12_1': {y:2023,m:12,set:1, dur:1567.02, st:[0,227.23,427.01,631.35,827.14,1092.17,1315.22]},
+  '2023_12_2': {y:2023,m:12,set:2, dur:1564.14, st:[0,230.71,412.15,619.32,813.21,1067.79,1298.46]},
+  '2024_06_1': {y:2024,m:6, set:1, dur:1620.47, st:[0,222.77,426.60,654.06,856.91,1117.58,1358.46]},
+  '2024_06_2': {y:2024,m:6, set:2, dur:1549.10, st:[0,225.93,427.29,629.40,813.95,1065.19,1293.49]},
+  '2024_12_1': {y:2024,m:12,set:1, dur:1666.31, st:[0,248.36,448.47,641.47,854.54,1142.38,1365.94]},
+  '2024_12_2': {y:2024,m:12,set:2, dur:1640.49, st:[0,230.20,430.73,655.73,869.17,1132.90,1379.68]},
+  '2025_06_1': {y:2025,m:6, set:1, dur:1557.92, st:[0,223.75,420.65,628.70,820.13,1089.99,1309.09]},
+  '2025_06_2': {y:2025,m:6, set:2, dur:1567.86, st:[0,236.66,434.12,652.25,846.04,1084.65,1317.27]},
+  '2025_12_1': {y:2025,m:12,set:1, dur:1543.99, st:[0,235.50,421.16,612.03,809.96,1053.91,1296.60]},
+  '2025_12_2': {y:2025,m:12,set:2, dur:1555.13, st:[0,231.87,430.73,641.80,835.32,1089.06,1325.02]}
+};
+
+const CN = ['零','一','二','三','四','五','六','七','八','九','十'];
+const a = document.getElementById('audio');
+let curKey = null, curIdx = -1, curSeg = null, switching = false;
+
+/* ---------- 工具 ---------- */
+const fileOf    = k => 'cet6_' + k + '.m4a';
+const paperName = p => p.y + '年' + p.m + '月第' + CN[p.set] + '套';
+function mmss(t){
+  t = Math.max(0, Math.round(t));
+  return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0');
+}
+function segRange(k, i){
+  const p = PAPERS[k];
+  return {start:p.st[i], end:(i < 6 ? p.st[i+1] : p.dur)};
+}
+
+/* ---------- 试卷列表：桌面侧栏 + 手机下拉，共用一份数据 ---------- */
+const byYear = {};
+Object.keys(PAPERS).forEach(k=>{
+  const p = PAPERS[k], gk = p.y + '年' + p.m + '月';
+  (byYear[gk] = byYear[gk] || []).push(k);
+});
+
+(function buildSidebar(){
+  const box = document.getElementById('papers');
+  Object.keys(byYear).forEach(gk=>{
+    const h = document.createElement('div');
+    h.className = 'ptitle'; h.textContent = gk;
+    box.appendChild(h);
+    byYear[gk].forEach(k=>{
+      const p = PAPERS[k];
+      const el = document.createElement('div');
+      el.className = 'paper'; el.dataset.k = k;
+      el.innerHTML = '<span class="pn">第' + CN[p.set] + '套</span>' +
+                     '<span class="badge">' + mmss(p.dur) + '</span>';
+      el.onclick = () => selectPaper(k);
+      box.appendChild(el);
+    });
+  });
+})();
+
+(function buildSelect(){
+  const sel = document.getElementById('paperSel');
+  Object.keys(byYear).forEach(gk=>{
+    const g = document.createElement('optgroup');
+    g.label = gk;
+    byYear[gk].forEach(k=>{
+      const o = document.createElement('option');
+      o.value = k; o.textContent = gk + ' · 第' + CN[PAPERS[k].set] + '套';
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  });
+  sel.onchange = () => { if (sel.value !== curKey) selectPaper(sel.value); };
+})();
+
+function selectPaper(k){
+  curKey = k; curIdx = -1; curSeg = null;
+  const p = PAPERS[k];
+  document.querySelectorAll('.paper').forEach(e=>e.classList.toggle('on', e.dataset.k===k));
+  document.getElementById('paperSel').value = k;
+  document.getElementById('paperTitle').textContent = paperName(p);
+  document.getElementById('paperMeta').textContent =
+    '录音 ' + mmss(p.dur) + ' · 自动切分为 7 段 · 共 25 题';
+
+  // 时间轴
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  SEGS.forEach((sg,i)=>{
+    const r = segRange(k,i);
+    const b = document.createElement('div');
+    b.className = 'tblock s' + sg.s;
+    b.style.left  = (r.start/p.dur*100) + '%';
+    b.style.width = ((r.end-r.start)/p.dur*100) + '%';
+    b.dataset.i = i;
+    b.innerHTML = '<b>' + (i+1) + '</b><span>' + sg.zh + '</span>';
+    b.onclick = () => load(k, i, true);
+    b.title = 'Section ' + sg.s + ' ' + sg.n + '（' + mmss(r.start) + ' – ' + mmss(r.end) + '）';
+    tl.appendChild(b);
+  });
+  const ph = document.createElement('div');
+  ph.className = 'playhead'; ph.id = 'playhead'; ph.style.left = '0%';
+  tl.appendChild(ph);
+
+  // 章节
+  const sec = document.getElementById('sections');
+  sec.innerHTML = '';
+  ['A','B','C'].forEach(s=>{
+    const info = SECTION[s];
+    const wrap = document.createElement('div');
+    wrap.className = 'section';
+    wrap.innerHTML =
+      '<div class="sec-head">' +
+        '<span class="tag" style="background:' + info.color + '">Section ' + s + '</span>' +
+        '<span class="zh">' + info.zh + '</span>' +
+        '<span class="en">' + info.en + '</span>' +
+        '<span class="q">' + info.q + ' 题</span>' +
+      '</div><div class="items"></div>';
+    const items = wrap.querySelector('.items');
+    SEGS.forEach((sg,i)=>{
+      if (sg.s !== s) return;
+      const r = segRange(k,i);
+      const el = document.createElement('div');
+      el.className = 'item'; el.dataset.i = i;
+      el.innerHTML =
+        '<div class="r1"><span class="idx">' + (i+1) + '</span><span class="nm">' + sg.n + '</span></div>' +
+        '<div class="r2"><span>' + sg.zh + '</span><span>' + sg.q + ' 题</span>' +
+        '<span>' + mmss(r.end-r.start) + '</span><span class="st"></span></div>';
+      el.onclick = () => load(k, i, true);
+      items.appendChild(el);
+    });
+    sec.appendChild(wrap);
+  });
+
+  document.getElementById('nowTitle').textContent = paperName(p) + '，点任意一段开始';
+  document.getElementById('nowMeta').textContent = '—';
+  document.getElementById('segfill').style.width = '0%';
+}
+
+/* ---------- 播放 ---------- */
+/* 音频还没加载完就动 currentTime 是不生效的，要等元数据就绪；
+   再留一道兜底，防止个别浏览器时序不同。 */
+function seekTo(t){
+  const apply = () => { try { a.currentTime = t; } catch (e) {} };
+  if (a.readyState >= 1) apply();
+  else {
+    a.addEventListener('loadedmetadata', apply, {once:true});
+    a.addEventListener('canplay', apply, {once:true});
+  }
+  if (t > 1) setTimeout(() => { if (a.readyState >= 1 && a.currentTime < 0.5) apply(); }, 1200);
+}
+
+function load(k, i, autoplay){
+  if (!PAPERS[k]) return;
+  if (curKey !== k) selectPaper(k);
+  curKey = k; curIdx = i; curSeg = SEGS[i];
+
+  const url = fileOf(k);
+  if (a.dataset.file !== url){ a.dataset.file = url; a.src = url; }
+
+  const r = segRange(k, i);
+  seekTo(r.start);
+  if (autoplay) a.play().catch(()=>{});
+
+  document.getElementById('nowTitle').textContent =
+    'Section ' + curSeg.s + ' · ' + curSeg.n;
+  document.getElementById('nowMeta').textContent =
+    paperName(PAPERS[k]) + ' · ' + curSeg.q + ' 题 · 本段 ' + mmss(r.end-r.start) +
+    ' · 全程 ' + mmss(r.start) + '–' + mmss(r.end) + ' · 第 ' + (i+1) + '/7 段';
+  paint();
+}
+
+function paint(){
+  document.querySelectorAll('.item').forEach(e=>e.classList.toggle('on', +e.dataset.i === curIdx));
+  document.querySelectorAll('.tblock').forEach(e=>e.classList.toggle('on', +e.dataset.i === curIdx));
+  document.getElementById('btnPlay').textContent = a.paused ? '▶' : '❚❚';
+  const loopOn = document.getElementById('btnLoop').classList.contains('on');
+  if (loopOn) document.getElementById('optAuto').checked = false;
+  document.querySelectorAll('.item .st').forEach(e=>{ e.textContent=''; e.classList.remove('playing'); });
+  const st = document.querySelector('.item.on .st');
+  if (st && curSeg){ st.textContent = a.paused ? '已暂停' : '播放中'; st.classList.add('playing'); }
+}
+
+function tick(){
+  const p = PAPERS[curKey];
+  if (p && !isNaN(a.currentTime)){
+    const ph = document.getElementById('playhead');
+    if (ph) ph.style.left = (a.currentTime / p.dur * 100) + '%';
+  }
+  if (curKey && curIdx >= 0){
+    const r = segRange(curKey, curIdx);
+    const done = Math.min(1, Math.max(0, (a.currentTime - r.start) / (r.end - r.start)));
+    document.getElementById('segfill').style.width = (done*100) + '%';
+    if (!switching && !a.paused && a.currentTime >= r.end - 0.08) onSegEnd();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function onSegEnd(){
+  if (switching) return;
+  switching = true;
+  setTimeout(()=>{ switching = false; }, 350);
+
+  const looping = document.getElementById('btnLoop').classList.contains('on');
+  if (looping){
+    a.currentTime = segRange(curKey, curIdx).start;
+    a.play().catch(()=>{});
+    return;
+  }
+  if (document.getElementById('optAuto').checked && curIdx < 6){
+    load(curKey, curIdx + 1, true);
+    return;
+  }
+  a.pause();
+  a.currentTime = segRange(curKey, curIdx).start;
+  paint();
+}
+
+/* ---------- 控制 ---------- */
+const btnPlay = document.getElementById('btnPlay');
+btnPlay.onclick = () => {
+  if (curIdx < 0){ load(curKey || '2023_06_1', 0, true); return; }
+  if (a.paused) a.play().catch(()=>{}); else a.pause();
+};
+document.getElementById('btnPrev').onclick = () => { if (curIdx > 0) load(curKey, curIdx-1, true); };
+document.getElementById('btnNext').onclick = () => { if (curIdx >= 0 && curIdx < 6) load(curKey, curIdx+1, true); };
+
+const btnLoop = document.getElementById('btnLoop');
+btnLoop.onclick = () => {
+  btnLoop.classList.toggle('on');
+  if (btnLoop.classList.contains('on')) document.getElementById('optAuto').checked = false;
+  paint();
+};
+
+a.addEventListener('play', paint);
+a.addEventListener('pause', paint);
+a.addEventListener('ended', onSegEnd);
+a.addEventListener('error', () => {
+  document.getElementById('nowTitle').textContent = '音频加载失败：' + (a.dataset.file || '');
+});
+document.getElementById('segbar').onclick = e => {
+  if (curIdx < 0 || !curKey) return;
+  const r = segRange(curKey, curIdx), box = e.currentTarget.getBoundingClientRect();
+  a.currentTime = r.start + ((e.clientX - box.left) / box.width) * (r.end - r.start);
+};
+document.getElementById('optRate').onchange = e => { a.playbackRate = +e.target.value; };
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space'){ e.preventDefault(); btnPlay.click(); }
+  else if (e.key === '[') document.getElementById('btnPrev').click();
+  else if (e.key === ']') document.getElementById('btnNext').click();
+  else if (curIdx >= 0 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')){
+    const r = segRange(curKey, curIdx), d = e.key === 'ArrowLeft' ? -5 : 5;
+    a.currentTime = Math.min(r.end, Math.max(r.start, a.currentTime + d));
+  }
+});
+
+/* ---------- 导出 / 核对：只有电脑上跑着 server.py 时才可用 ---------- */
+const btnSeg = document.getElementById('btnExportSeg');
+const btnPaper = document.getElementById('btnExportPaper');
+const btnCheck = document.getElementById('btnCheck');
+const warn = document.getElementById('warn');
+
+const fmt = () => document.getElementById('optFmt').value;
+const stem = p => p.y + '-' + String(p.m).padStart(2,'0') + '_第' + p.set + '套';
+
+btnSeg.onclick = () => {
+  if (curIdx < 0){ alert('请先选择一段'); return; }
+  const r = segRange(curKey, curIdx), p = PAPERS[curKey];
+  location.href = '/api/export?fmt=' + fmt() +
+    '&file=' + encodeURIComponent(fileOf(curKey)) +
+    '&start=' + r.start + '&end=' + r.end +
+    '&name=' + encodeURIComponent(stem(p) + '_Section' + curSeg.s + '_' + curSeg.n.replace(/ /g,''));
+};
+btnPaper.onclick = () => {
+  if (!curKey){ alert('请先选择一套试卷'); return; }
+  const p = PAPERS[curKey];
+  location.href = '/api/export?fmt=' + fmt() +
+    '&paper=' + curKey + '&starts=' + encodeURIComponent(JSON.stringify(p.st)) + '&dur=' + p.dur +
+    '&name=' + encodeURIComponent(stem(p) + '_听力7段');
+};
+btnCheck.onclick = async () => {
+  const old = btnCheck.textContent;
+  btnCheck.disabled = true; btnCheck.textContent = '核对中…';
+  try{
+    const j = await (await fetch('/api/analyze?file=' + encodeURIComponent(fileOf(curKey)))).json();
+    if (!j.ok) throw new Error(j.error || '失败');
+    const worst = Math.max(...j.starts.map((v,i)=>Math.abs(v - PAPERS[curKey].st[i])));
+    alert('重新分析结果：' + j.starts.length + ' 段（题数 ' + j.counts.join('/') + '）\n' +
+          '与网页内数据最大偏差：' + worst.toFixed(2) + ' 秒\n' +
+          (worst < 1.5 ? '✓ 一致，分段可靠。' : '⚠ 存在偏差。'));
+  }catch(err){
+    alert('核对失败：' + err.message);
+  }finally{
+    btnCheck.disabled = false; btnCheck.textContent = old;
+  }
+};
+
+/* 探测本地服务在不在：不在就把导出相关入口收起来 */
+(async () => {
+  let ok = false;
+  try {
+    const r = await fetch('/api/ping', {cache:'no-store'});
+    ok = r.ok && (await r.json()).api === true;
+  } catch (e) { ok = false; }
+
+  const actions = document.getElementById('actions');
+  if (ok){
+    actions.style.display = 'flex';            // 手机上也把导出按钮放出来
+  } else {
+    actions.style.display = 'none';
+    warn.classList.add('show');
+    warn.innerHTML = location.protocol === 'file:'
+      ? '<span>ℹ️</span><span>直接打开也能正常播放。要<b>导出音频</b>，请双击文件夹里的 <b>启动.bat</b>。</span>'
+      : '<span>ℹ️</span><span>分节播放全部可用。要<b>导出音频</b>，请在电脑上双击 <b>启动.bat</b> 打开本页。</span>';
+  }
+})();
+
+selectPaper('2023_06_1');
+</script>
+</body>
+</html>
