@@ -315,6 +315,67 @@ const CN = ['零','一','二','三','四','五','六','七','八','九','十'];
 const a = document.getElementById('audio');
 let curKey = null, curIdx = -1, curSeg = null, switching = false;
 
+/* ---------- 播放失败排查 ----------
+   play() 被浏览器拒绝时不再一声不响：把真实原因写到顶部提示条，
+   免得界面上不管什么毛病都只显示“已暂停”，看不出问题在哪。 */
+const CODECS = [
+  ['aac-lc',   'audio/mp4; codecs="mp4a.40.2"'],
+  ['he-aac',   'audio/mp4; codecs="mp4a.40.5"'],
+  ['he-aacv2', 'audio/mp4; codecs="mp4a.40.29"'],
+  ['mp3',      'audio/mpeg']
+];
+function codecReport(){
+  return CODECS.map(c => c[0] + ':' + (a.canPlayType(c[1]) || '×')).join('　');
+}
+function techInfo(){
+  return '格式支持 ' + codecReport() +
+         '　就绪 ' + a.readyState + '/4　网络 ' + a.networkState + '/3' +
+         (a.error ? '　错误码 ' + a.error.code : '') +
+         '　音源 ' + (a.dataset.file || '未加载');
+}
+function showWarn(html, kind){
+  const w = document.getElementById('warn');
+  const bad = kind === 'err';
+  w.style.background  = bad ? '#fff1f0' : '#fff8e6';
+  w.style.borderColor = bad ? '#ffccc7' : '#ffe2a3';
+  w.style.color       = bad ? '#a8071a' : '#7a5b00';
+  w.innerHTML = '<span>' + (bad ? '⚠️' : 'ℹ️') + '</span><span>' + html + '</span>';
+  w.classList.add('show');
+  if (bad) try { w.scrollIntoView({block:'nearest'}); } catch (e) {}
+}
+function markFail(txt){
+  const st = document.querySelector('.item.on .st');
+  if (st){ st.textContent = txt; st.classList.remove('playing'); }
+}
+function failPlay(err){
+  const n = (err && err.name) || '未知错误';
+  let why;
+  if (n === 'NotAllowedError')        why = '浏览器拦住了播放：再点一次这一段，或点底部的 ▶。';
+  else if (n === 'NotSupportedError') why = '这个浏览器解不开 m4a（HE-AACv2）音频。';
+  else if (n === 'AbortError')        why = '加载被中断（网络不稳），点 ▶ 重试一次。';
+  else                                why = '播放没能开始。';
+  markFail('播放失败');
+  showWarn('<b>播放失败：' + why + '</b><br>' +
+           '<span style="font-size:11.5px;opacity:.85">' + n + '　' + techInfo() + '</span>', 'err');
+}
+let playStamp = 0;   // 用户主动暂停时 +1，用来作废“没能播放”的误报
+function playAudio(){
+  const src = a.dataset.file, stamp = ++playStamp;
+  let pr;
+  try { pr = a.play(); } catch (e) { failPlay(e); return; }
+  if (pr && pr.catch) pr.catch(failPlay);
+  /* 有的浏览器 play() 既不报错也不播，2.5 秒后还是暂停就把实情写出来 */
+  setTimeout(() => {
+    if (stamp !== playStamp || !a.paused || a.error || a.dataset.file !== src) return;
+    const loading = a.readyState < 3;
+    markFail(loading ? '加载中…' : '未能播放');
+    showWarn('<b>点了播放，2.5 秒后还是没出声：</b>' +
+             (loading ? '音频还在下载（网络慢），再等等或换个网络。' : '浏览器把播放拦住了。') +
+             '<br><span style="font-size:11.5px;opacity:.85">' + techInfo() + '</span>', 'err');
+  }, 2500);
+}
+function pauseAudio(){ playStamp++; a.pause(); }
+
 /* ---------- 工具 ---------- */
 const fileOf    = k => 'cet6_' + k + '.m4a';
 const paperName = p => p.y + '年' + p.m + '月第' + CN[p.set] + '套';
@@ -453,7 +514,7 @@ function load(k, i, autoplay){
 
   const r = segRange(k, i);
   seekTo(r.start);
-  if (autoplay) a.play().catch(()=>{});
+  if (autoplay) playAudio();
 
   document.getElementById('nowTitle').textContent =
     'Section ' + curSeg.s + ' · ' + curSeg.n;
@@ -471,7 +532,13 @@ function paint(){
   if (loopOn) document.getElementById('optAuto').checked = false;
   document.querySelectorAll('.item .st').forEach(e=>{ e.textContent=''; e.classList.remove('playing'); });
   const st = document.querySelector('.item.on .st');
-  if (st && curSeg){ st.textContent = a.paused ? '已暂停' : '播放中'; st.classList.add('playing'); }
+  if (st && curSeg){
+    /* 状态说实话：加载中就是加载中，出错就是出错，别一律写“已暂停” */
+    if (a.error)               st.textContent = '加载失败';
+    else if (!a.paused)      { st.textContent = '播放中'; st.classList.add('playing'); }
+    else if (a.readyState < 3) st.textContent = '加载中…';
+    else                       st.textContent = '已暂停';
+  }
 }
 
 function tick(){
@@ -498,14 +565,14 @@ function onSegEnd(){
   const looping = document.getElementById('btnLoop').classList.contains('on');
   if (looping){
     a.currentTime = segRange(curKey, curIdx).start;
-    a.play().catch(()=>{});
+    playAudio();
     return;
   }
   if (document.getElementById('optAuto').checked && curIdx < 6){
     load(curKey, curIdx + 1, true);
     return;
   }
-  a.pause();
+  pauseAudio();
   a.currentTime = segRange(curKey, curIdx).start;
   paint();
 }
@@ -514,7 +581,7 @@ function onSegEnd(){
 const btnPlay = document.getElementById('btnPlay');
 btnPlay.onclick = () => {
   if (curIdx < 0){ load(curKey || '2023_06_1', 0, true); return; }
-  if (a.paused) a.play().catch(()=>{}); else a.pause();
+  if (a.paused) playAudio(); else pauseAudio();
 };
 document.getElementById('btnPrev').onclick = () => { if (curIdx > 0) load(curKey, curIdx-1, true); };
 document.getElementById('btnNext').onclick = () => { if (curIdx >= 0 && curIdx < 6) load(curKey, curIdx+1, true); };
@@ -529,8 +596,14 @@ btnLoop.onclick = () => {
 a.addEventListener('play', paint);
 a.addEventListener('pause', paint);
 a.addEventListener('ended', onSegEnd);
+['loadedmetadata','canplay','waiting','stalled','emptied'].forEach(ev => a.addEventListener(ev, paint));
 a.addEventListener('error', () => {
+  const c = a.error ? a.error.code : 0;
+  const msg = {1:'网络中断', 2:'解码失败', 3:'这个浏览器不支持这种音频格式', 4:'文件不存在或打不开'}[c] || '未知错误';
   document.getElementById('nowTitle').textContent = '音频加载失败：' + (a.dataset.file || '');
+  markFail('加载失败');
+  showWarn('<b>音频加载失败：' + msg + '（' + c + '）</b><br>' +
+           '<span style="font-size:11.5px;opacity:.85">' + techInfo() + '</span>', 'err');
 });
 document.getElementById('segbar').onclick = e => {
   if (curIdx < 0 || !curKey) return;
@@ -554,7 +627,6 @@ document.addEventListener('keydown', e => {
 const btnSeg = document.getElementById('btnExportSeg');
 const btnPaper = document.getElementById('btnExportPaper');
 const btnCheck = document.getElementById('btnCheck');
-const warn = document.getElementById('warn');
 
 const fmt = () => document.getElementById('optFmt').value;
 const stem = p => p.y + '-' + String(p.m).padStart(2,'0') + '_第' + p.set + '套';
@@ -604,10 +676,9 @@ btnCheck.onclick = async () => {
     actions.style.display = 'flex';            // 手机上也把导出按钮放出来
   } else {
     actions.style.display = 'none';
-    warn.classList.add('show');
-    warn.innerHTML = location.protocol === 'file:'
-      ? '<span>ℹ️</span><span>直接打开也能正常播放。要<b>导出音频</b>，请双击文件夹里的 <b>启动.bat</b>。</span>'
-      : '<span>ℹ️</span><span>分节播放全部可用。要<b>导出音频</b>，请在电脑上双击 <b>启动.bat</b> 打开本页。</span>';
+    showWarn(location.protocol === 'file:'
+      ? '直接打开也能正常播放。要<b>导出音频</b>，请双击文件夹里的 <b>启动.bat</b>。'
+      : '分节播放全部可用。要<b>导出音频</b>，请在电脑上双击 <b>启动.bat</b> 打开本页。', 'info');
   }
 })();
 
