@@ -87,9 +87,9 @@ def segment(path):
 
 
 def main():
-    files = sorted(HERE.glob("cet6_*.m4a"))
+    files = sorted(HERE.glob("cet6_*.mp3"))
     if not files:
-        raise SystemExit("没有找到 cet6_*.m4a")
+        raise SystemExit("没有找到 cet6_*.mp3")
 
     out = {}
     ok = True

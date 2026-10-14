@@ -222,8 +222,8 @@
       <div class="actions" id="actions">
         <label class="fmt">格式
           <select id="optFmt">
-            <option value="m4a" selected>m4a 原音质</option>
-            <option value="mp3">mp3 通用</option>
+            <option value="copy" selected>原音质（直接剪切）</option>
+            <option value="mp3">重编码 64k</option>
           </select>
         </label>
         <button id="btnCheck" title="重新用 ffmpeg 核对本卷的分段是否准确">重新核对分析</button>
@@ -352,7 +352,7 @@ function plainVerdict(){
   const c = a.error ? a.error.code : 0;
   if (c === 1 || c === 4) return '音频没能从网上取下来（网络问题）';
   if (c === 2 || c === 3) return '你的浏览器解不开这种音频格式';
-  if (!a.canPlayType('audio/mp4; codecs="mp4a.40.29"')) return '你的浏览器不支持这种 m4a 音频格式';
+  if (!a.canPlayType('audio/mpeg')) return '你的浏览器连 mp3 都不支持（很罕见）';
   if (a.networkState === 3) return '音频下载失败了';
   if (a.readyState < 2)     return '音频一直没下载完（网络太慢或断了）';
   return '浏览器把播放拦住了';
@@ -382,7 +382,7 @@ function playAudio(){
 function pauseAudio(){ playStamp++; a.pause(); }
 
 /* ---------- 工具 ---------- */
-const fileOf    = k => 'cet6_' + k + '.m4a';
+const fileOf    = k => 'cet6_' + k + '.mp3';
 const paperName = p => p.y + '年' + p.m + '月第' + CN[p.set] + '套';
 function mmss(t){
   t = Math.max(0, Math.round(t));

@@ -94,10 +94,10 @@ def cut(src, dst, start, end, fmt):
     dur = max(0.05, end - start)
     cmd = [FFMPEG, "-hide_banner", "-y", "-ss", "%.3f" % start, "-i", src,
            "-t", "%.3f" % dur, "-vn"]
-    if fmt == "mp3":
-        cmd += ["-c:a", "libmp3lame", "-b:a", "64k"]
+    if fmt == "copy":
+        cmd += ["-c", "copy"]                  # 源本来就是 mp3，直接切，不重新编码
     else:
-        cmd += ["-c", "copy", "-movflags", "+faststart"]
+        cmd += ["-c:a", "libmp3lame", "-b:a", "64k"]
     cmd.append(dst)
     proc = run(cmd)
     if proc.returncode != 0 or not os.path.isfile(dst) or os.path.getsize(dst) == 0:
@@ -120,15 +120,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ---- 静态文件 ----
     def guess_type(self, path):
-        if path.lower().endswith(".m4a"):
-            return "audio/mp4"                     # 有些 Python 版本认不出 .m4a
         if path.lower().endswith(".mp3"):
-            try:                                   # 万一还是老后缀，按真实内容返回
-                with open(path, "rb") as fh:
-                    if fh.read(8)[4:8] == b"ftyp":
-                        return "audio/mp4"
-            except OSError:
-                pass
+            return "audio/mpeg"                    # 最通用的格式，所有手机浏览器都认
+        if path.lower().endswith(".m4a"):
+            return "audio/mp4"
         if path.lower().endswith((".html", ".htm")):
             return "text/html"
         return super().guess_type(path)
@@ -229,8 +224,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"ok": True, "starts": segs, "counts": counts})
 
         if self.path.startswith("/api/export"):
-            fmt = "mp3" if one("fmt") == "mp3" else "m4a"
-            ext = "mp3" if fmt == "mp3" else "m4a"
+            fmt = "copy" if one("fmt") == "copy" else "mp3"
+            ext = "mp3"
             name = safe_name(one("name"), "clip")
 
             paper = one("paper")
@@ -257,14 +252,14 @@ class Handler(SimpleHTTPRequestHandler):
                 cut(src, out, float(one("start", "0")), float(one("end", "0")), fmt)
                 with open(out, "rb") as fh:
                     data = fh.read()
-            ctype = "audio/mpeg" if fmt == "mp3" else "audio/mp4"
+            ctype = "audio/mpeg"
             return self.send_file(data, name + "." + ext, ctype)
 
         self.send_json({"ok": False, "error": "未知接口"}, 404)
 
     def source_path(self, fname):
         fname = os.path.basename(fname or "")
-        if not re.match(r"^cet6_\d{4}_\d{2}_\d\.m4a$", fname):
+        if not re.match(r"^cet6_\d{4}_\d{2}_\d\.mp3$", fname):
             raise RuntimeError("文件名不合法：%s" % fname)
         p = os.path.join(HERE, fname)
         if not os.path.isfile(p):
