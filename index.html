@@ -347,16 +347,21 @@ function markFail(txt){
   const st = document.querySelector('.item.on .st');
   if (st){ st.textContent = txt; st.classList.remove('playing'); }
 }
+/* 一句话说清到底是哪一类毛病，两种修法完全不同 */
+function plainVerdict(){
+  const c = a.error ? a.error.code : 0;
+  if (c === 1 || c === 4) return '音频没能从网上取下来（网络问题）';
+  if (c === 2 || c === 3) return '你的浏览器解不开这种音频格式';
+  if (!a.canPlayType('audio/mp4; codecs="mp4a.40.29"')) return '你的浏览器不支持这种 m4a 音频格式';
+  if (a.networkState === 3) return '音频下载失败了';
+  if (a.readyState < 2)     return '音频一直没下载完（网络太慢或断了）';
+  return '浏览器把播放拦住了';
+}
 function failPlay(err){
   const n = (err && err.name) || '未知错误';
-  let why;
-  if (n === 'NotAllowedError')        why = '浏览器拦住了播放：再点一次这一段，或点底部的 ▶。';
-  else if (n === 'NotSupportedError') why = '这个浏览器解不开 m4a（HE-AACv2）音频。';
-  else if (n === 'AbortError')        why = '加载被中断（网络不稳），点 ▶ 重试一次。';
-  else                                why = '播放没能开始。';
   markFail('播放失败');
-  showWarn('<b>播放失败：' + why + '</b><br>' +
-           '<span style="font-size:11.5px;opacity:.85">' + n + '　' + techInfo() + '</span>', 'err');
+  showWarn('<b>' + plainVerdict() + '</b>' + (n === 'NotAllowedError' ? '：再点一次这一段，或点底部的 ▶。' : '。') +
+           '<br><span style="font-size:11px;opacity:.7">' + n + '　' + techInfo() + '</span>', 'err');
 }
 let playStamp = 0;   // 用户主动暂停时 +1，用来作废“没能播放”的误报
 function playAudio(){
@@ -369,9 +374,9 @@ function playAudio(){
     if (stamp !== playStamp || !a.paused || a.error || a.dataset.file !== src) return;
     const loading = a.readyState < 3;
     markFail(loading ? '加载中…' : '未能播放');
-    showWarn('<b>点了播放，2.5 秒后还是没出声：</b>' +
-             (loading ? '音频还在下载（网络慢），再等等或换个网络。' : '浏览器把播放拦住了。') +
-             '<br><span style="font-size:11.5px;opacity:.85">' + techInfo() + '</span>', 'err');
+    showWarn('<b>点了播放，2.5 秒还没出声：' +
+             (loading ? '音频还在下载（网络慢）' : plainVerdict()) + '</b><br>' +
+             '<span style="font-size:11px;opacity:.7">' + techInfo() + '</span>', 'err');
   }, 2500);
 }
 function pauseAudio(){ playStamp++; a.pause(); }
@@ -598,12 +603,10 @@ a.addEventListener('pause', paint);
 a.addEventListener('ended', onSegEnd);
 ['loadedmetadata','canplay','waiting','stalled','emptied'].forEach(ev => a.addEventListener(ev, paint));
 a.addEventListener('error', () => {
-  const c = a.error ? a.error.code : 0;
-  const msg = {1:'网络中断', 2:'解码失败', 3:'这个浏览器不支持这种音频格式', 4:'文件不存在或打不开'}[c] || '未知错误';
   document.getElementById('nowTitle').textContent = '音频加载失败：' + (a.dataset.file || '');
   markFail('加载失败');
-  showWarn('<b>音频加载失败：' + msg + '（' + c + '）</b><br>' +
-           '<span style="font-size:11.5px;opacity:.85">' + techInfo() + '</span>', 'err');
+  showWarn('<b>' + plainVerdict() + '</b><br>' +
+           '<span style="font-size:11px;opacity:.7">' + techInfo() + '</span>', 'err');
 });
 document.getElementById('segbar').onclick = e => {
   if (curIdx < 0 || !curKey) return;
